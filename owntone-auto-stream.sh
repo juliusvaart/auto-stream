@@ -1,11 +1,34 @@
 #!/bin/bash
 
-# Configuration
-FIFO_PATH="/root/music/pipes/platenspeler.fifo"
-MONITOR_DEV="monitor"
-THRESHOLD=-40
-CHECK_INTERVAL=2
-SILENCE_TIMEOUT=10
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${CONFIG_FILE:-$SCRIPT_DIR/.env}"
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Missing config file: $CONFIG_FILE" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+. "$CONFIG_FILE"
+
+required_vars=(
+    FIFO_PATH
+    STREAM_DEV
+    MONITOR_DEV
+    THRESHOLD
+    CHECK_INTERVAL
+    SILENCE_TIMEOUT
+    OWNTONE_BASE_URL
+    OUTPUT_NAME
+    OWNTONE_STREAM_URI
+)
+
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var:-}" ]; then
+        echo "Missing required variable in $CONFIG_FILE: $var" >&2
+        exit 1
+    fi
+done
 
 STREAM_PID=""
 SILENCE_COUNT=0
@@ -46,7 +69,7 @@ start_stream() {
     if [ -z "$STREAM_PID" ] || ! kill -0 $STREAM_PID 2>/dev/null; then
         log "Starting stream..."
 
-        arecord -D stream \
+        arecord -D "$STREAM_DEV" \
           -f S16_LE -c 2 -r 44100 -t raw \
           --buffer-size=524288 --period-size=131072 \
           > "$FIFO_PATH" &
@@ -54,14 +77,17 @@ start_stream() {
         STREAM_PID=$!
         SILENCE_COUNT=0
 
-        OUTPUT_NAME="mini-i_Pro3_474"
-        ID=$(curl -s http://localhost:3689/api/outputs \
+        ID=$(curl -s "$OWNTONE_BASE_URL/api/outputs" \
             | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
             | head -n1)
 
-        curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}"
-        curl -X PUT "http://localhost:3689/api/player/volume?volume=50"
-        curl -X POST "http://localhost:3689/api/queue/items/add?clear=true&playback=start&uris=library:track:1"
+        curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
+
+        if [ -n "${OWNTONE_VOLUME:-}" ]; then
+            curl -s -X PUT "$OWNTONE_BASE_URL/api/player/volume?volume=$OWNTONE_VOLUME" >/dev/null
+        fi
+
+        curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
 
         log "✓ Stream started (PID: $STREAM_PID)"
     fi
@@ -72,8 +98,8 @@ stop_stream() {
         kill $STREAM_PID 2>/dev/null
         wait $STREAM_PID 2>/dev/null
 
-        curl -X POST "http://localhost:3689/api/player/stop"
-        curl -X PUT "http://localhost:3689/api/queue/clear"
+        curl -s -X POST "$OWNTONE_BASE_URL/api/player/stop" >/dev/null
+        curl -s -X PUT "$OWNTONE_BASE_URL/api/queue/clear" >/dev/null
 
         log "✓ Stopped stream after ${SILENCE_COUNT}s of silence"
         STREAM_PID=""
@@ -93,9 +119,17 @@ trap cleanup SIGTERM SIGINT EXIT
 log "=========================================="
 log "HiFiBerry Auto-Stream"
 log "=========================================="
-log "Source: stream"
+log "Source: $STREAM_DEV"
 log "Monitor: $MONITOR_DEV (dsnoop)"
 log "FIFO: $FIFO_PATH"
+log "Owntone API: $OWNTONE_BASE_URL"
+log "Owntone output: $OUTPUT_NAME"
+if [ -n "${OWNTONE_VOLUME:-}" ]; then
+    log "Owntone volume: $OWNTONE_VOLUME"
+else
+    log "Owntone volume: (unchanged)"
+fi
+log "Owntone URI: $OWNTONE_STREAM_URI"
 log "Threshold: ${THRESHOLD}dB"
 log "Check interval: ${CHECK_INTERVAL}s"
 log "Stop after: ${SILENCE_TIMEOUT}s silence"

@@ -12,19 +12,35 @@ https://dietpi.com/
 
 ## Login as root
 
+## Setup dietpi
+
+- setup hostname
+- setup audio card
+
+```dietpi-config```
+
 ## Clone this repo
 
-## Setup .asoundrc
+```
+cd ~
+git clone git@github.com:juliusvaart/auto-stream.git
+```
 
-Add contents from asound.conf to ```~/.asoundrc```
+## Setup .asoundrc and alsamixer
 
-## Install Owntone
+Copy contents from ```~/auto-stream/asound.conf``` to ```~/.asoundrc```
+
+```alsamixer```
+
+Setup PGA Gain Left & Right to 12db (24)
+
+## Install Owntone and other needed packages
 
 ```
 wget -q -O - https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone.gpg | sudo gpg --dearmor --output /usr/share/keyrings/owntone-archive-keyring.gpg
 wget -q -O /etc/apt/sources.list.d/owntone.list https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone-trixie.list
 apt update
-apt install owntone
+apt install owntone alsa-utils sox bc curl jq
 ```
 
 Access Owntone: http://HOSTNAME.local:3689
@@ -35,6 +51,14 @@ Access Owntone: http://HOSTNAME.local:3689
 mkdir -p /root/music/pipes/
 mkfifo /root/music/pipes/platenspeler.fifo
 ```
+
+## Setup .env
+
+Copy .env.example to .env and configure
+
+## Test
+
+```~/auto-stream/owntone-auto-stream.sh```
 
 ## Setup service
 
