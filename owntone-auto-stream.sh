@@ -55,19 +55,17 @@ start_stream() {
         SILENCE_COUNT=0
 
         curl -X POST "http://localhost:3689/api/queue/items/add?clear=true&playback=start&uris=library:track:1"
-        curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"31368131400954\"]}"
+        # curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"31368131400954\"]}"
 
-        # OUTPUT_NAME="mini-i_Pro3_474"
+        OUTPUT_NAME="mini-i_Pro3_474"
 
-        # ID=$(curl -s http://localhost:3689/api/outputs \
-        #   | jq -r --arg n "$OUTPUT_NAME" '.outputs.items[] | select(.name==$n) | .id' \
-        #   | head -n1)
+        ID=$(curl -s http://localhost:3689/api/outputs \
+            | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
+            | head -n1)
 
-        # curl -v -X PUT "http://localhost:3689/api/outputs/set" \
-        #   -H "Content-Type: application/json" \
-        #   --data "{\"outputs\":[\"$ID\"]}"
+        curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}"
 
-        # log "✓ Stream started (PID: $STREAM_PID)"
+        log "✓ Stream started (PID: $STREAM_PID)"
     fi
 }
 
