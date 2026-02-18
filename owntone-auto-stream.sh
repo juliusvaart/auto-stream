@@ -60,6 +60,7 @@ start_stream() {
             | head -n1)
 
         curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}"
+        curl -X PUT "http://localhost:3689/api/player/volume?volume=50"
         curl -X POST "http://localhost:3689/api/queue/items/add?clear=true&playback=start&uris=library:track:1"
 
         log "✓ Stream started (PID: $STREAM_PID)"
