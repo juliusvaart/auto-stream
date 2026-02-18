@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/root/auto-stream/owntone-auto-stream.sh
+ExecStart=/bin/bash /root/auto-stream/owntone-auto-stream.sh
 Restart=on-failure
 RestartSec=2
 User=root
