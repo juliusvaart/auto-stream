@@ -4,6 +4,7 @@
 
 - Raspberry Pi 4/5
 - Hifiberry ADC pro
+- Audio cable to mini-jack to attach to ADC port
 
 ## Install DietPi
 
@@ -24,6 +25,15 @@ wget -q -O - https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/ma
 wget -q -O /etc/apt/sources.list.d/owntone.list https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone-trixie.list
 apt update
 apt install owntone
+```
+
+Access Owntone: http://HOSTNAME.local:3689
+
+## Setup fifo
+
+```
+mkdir -p /root/music/pipes/
+mkfifo /root/music/pipes/platenspeler.fifo
 ```
 
 ## Setup service
