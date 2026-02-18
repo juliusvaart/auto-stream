@@ -1,15 +1,30 @@
 [Unit]
 Description=Autostream ADC input
-After=network-online.target
+After=network.target network-online.target sound.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/bin/bash /root/auto-stream/owntone-auto-stream.sh
-Restart=on-failure
-RestartSec=2
+Type=simple
 User=root
-StandardOutput=null
-StandardError=null
+WorkingDirectory=/root
+ExecStart=/root/auto-stream/owntone-auto-stream.sh
+Restart=always
+RestartSec=10
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10
+SendSIGKILL=yes
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=auto-stream
+
+# Resource limits (optional)
+Nice=-5
+LimitNICE=-5
 
 [Install]
 WantedBy=multi-user.target
