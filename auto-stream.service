@@ -1,0 +1,15 @@
+[Unit]
+Description=Autostream ADC input
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/root/auto-stream/owntone-auto-stream.sh
+Restart=on-failure
+RestartSec=2
+User=root
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target
