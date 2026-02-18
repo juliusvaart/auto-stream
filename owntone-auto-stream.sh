@@ -55,6 +55,17 @@ start_stream() {
 
         STREAM_PID=$!
         SILENCE_COUNT=0
+
+        OUTPUT_NAME="mini-i_Pro3_474"
+
+        ID=$(curl -s http://localhost:3689/api/outputs \
+          | jq -r --arg n "$OUTPUT_NAME" '.outputs.items[] | select(.name==$n) | .id' \
+          | head -n1)
+
+        curl -v -X PUT "http://localhost:3689/api/outputs/set" \
+          -H "Content-Type: application/json" \
+          --data "{\"outputs\":[\"$ID\"]}"
+
         log "✓ Stream started (PID: $STREAM_PID)"
     fi
 }
