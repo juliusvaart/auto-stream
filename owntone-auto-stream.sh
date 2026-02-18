@@ -54,16 +54,13 @@ start_stream() {
         STREAM_PID=$!
         SILENCE_COUNT=0
 
-        curl -X POST "http://localhost:3689/api/queue/items/add?clear=true&playback=start&uris=library:track:1"
-        # curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"31368131400954\"]}"
-
         OUTPUT_NAME="mini-i_Pro3_474"
-
         ID=$(curl -s http://localhost:3689/api/outputs \
             | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
             | head -n1)
 
         curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}"
+        curl -X POST "http://localhost:3689/api/queue/items/add?clear=true&playback=start&uris=library:track:1"
 
         log "✓ Stream started (PID: $STREAM_PID)"
     fi
@@ -75,7 +72,7 @@ stop_stream() {
         wait $STREAM_PID 2>/dev/null
 
         curl -X POST "http://localhost:3689/api/player/stop"
-        #curl -X PUT "http://localhost:3689/api/queue/clear"
+        curl -X PUT "http://localhost:3689/api/queue/clear"
 
         log "✓ Stopped stream after ${SILENCE_COUNT}s of silence"
         STREAM_PID=""
