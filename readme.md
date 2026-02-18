@@ -1,4 +1,10 @@
-# Auto stream from Raspberry Pi ADC to Airplay / Bluetooth
+# Auto stream from Raspberry Pi ADC to Airplay
+
+Use [Owntone Server](https://github.com/owntone/owntone-server) from a recordplayer (or anything) to Airplay device.
+
+The script auto-detects if a record is playing and automatically starts streaming. After X amount of seconds (default 300 / 5min) the stream disconnects.
+
+All config is in a .env. In .env.example you can see what to configure.
 
 ## Buy
 
@@ -69,3 +75,9 @@ systemctl daemon-reload
 systemctl enable auto-stream
 systemctl start auto-stream
 ```
+
+## BONUS!
+
+Add square artwork (jpg) using the same name as the fifo and place in the same directory. Example:
+- platenspeler.fifo
+- platenspeler.jpg
