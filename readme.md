@@ -58,6 +58,8 @@ mkdir -p /root/music/pipes/
 mkfifo /root/music/pipes/platenspeler.fifo
 ```
 
+The fifo filename is used as now playing metadata.
+
 ## Setup .env
 
 Copy .env.example to .env and configure
