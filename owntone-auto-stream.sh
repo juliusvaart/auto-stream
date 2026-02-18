@@ -46,8 +46,6 @@ start_stream() {
     if [ -z "$STREAM_PID" ] || ! kill -0 $STREAM_PID 2>/dev/null; then
         log "Starting stream..."
 
-        curl -X POST "http://localhost:3689/api/queue/items/add?clear=true&playback=start&uris=library:track:1"
-
         arecord -D stream \
           -f S16_LE -c 2 -r 44100 -t raw \
           --buffer-size=524288 --period-size=131072 \
@@ -56,17 +54,20 @@ start_stream() {
         STREAM_PID=$!
         SILENCE_COUNT=0
 
-        OUTPUT_NAME="mini-i_Pro3_474"
+        curl -X POST "http://localhost:3689/api/queue/items/add?clear=true&playback=start&uris=library:track:1"
+        curl -X PUT "http://localhost:3689/api/outputs/set" --data "{\"outputs\":[\"31368131400954\"]}"
 
-        ID=$(curl -s http://localhost:3689/api/outputs \
-          | jq -r --arg n "$OUTPUT_NAME" '.outputs.items[] | select(.name==$n) | .id' \
-          | head -n1)
+        # OUTPUT_NAME="mini-i_Pro3_474"
 
-        curl -v -X PUT "http://localhost:3689/api/outputs/set" \
-          -H "Content-Type: application/json" \
-          --data "{\"outputs\":[\"$ID\"]}"
+        # ID=$(curl -s http://localhost:3689/api/outputs \
+        #   | jq -r --arg n "$OUTPUT_NAME" '.outputs.items[] | select(.name==$n) | .id' \
+        #   | head -n1)
 
-        log "✓ Stream started (PID: $STREAM_PID)"
+        # curl -v -X PUT "http://localhost:3689/api/outputs/set" \
+        #   -H "Content-Type: application/json" \
+        #   --data "{\"outputs\":[\"$ID\"]}"
+
+        # log "✓ Stream started (PID: $STREAM_PID)"
     fi
 }
 
