@@ -82,12 +82,11 @@ start_stream() {
             | head -n1)
 
         curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
+        curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
 
         if [ -n "${OWNTONE_VOLUME:-}" ]; then
             curl -s -X PUT "$OWNTONE_BASE_URL/api/player/volume?volume=$OWNTONE_VOLUME" >/dev/null
         fi
-
-        curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
 
         log "✓ Stream started (PID: $STREAM_PID)"
     fi
