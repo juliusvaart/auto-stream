@@ -11,6 +11,9 @@ fi
 # shellcheck disable=SC1090
 . "$CONFIG_FILE"
 
+# Ensure ALSA can resolve locally installed LADSPA plugins (including hifiberry/riaa).
+export LADSPA_PATH="${LADSPA_PATH:-/usr/local/lib/ladspa:/usr/lib/ladspa:/usr/lib/aarch64-linux-gnu/ladspa:/usr/lib/arm-linux-gnueabihf/ladspa}"
+
 required_vars=(
     FIFO_PATH
     STREAM_DEV

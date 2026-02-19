@@ -46,7 +46,17 @@ Setup PGA Gain Left & Right to 12db (24)
 wget -q -O - https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone.gpg | sudo gpg --dearmor --output /usr/share/keyrings/owntone-archive-keyring.gpg
 wget -q -O /etc/apt/sources.list.d/owntone.list https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone-trixie.list
 apt update
-apt install owntone alsa-utils sox bc curl jq
+apt install owntone alsa-utils sox bc curl jq git build-essential ladspa-sdk
+```
+
+Install RIAA LADSPA plugin:
+
+```
+cd ~
+git clone https://github.com/hifiberry/riaa.git
+cd riaa
+make
+make install
 ```
 
 Access Owntone: http://HOSTNAME.local:3689
