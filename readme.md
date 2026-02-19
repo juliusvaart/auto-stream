@@ -1,6 +1,6 @@
 # Auto stream from Raspberry Pi ADC to Airplay
 
-Use [Owntone Server](https://github.com/owntone/owntone-server) from a recordplayer (or anything) to Airplay device.
+Use [Owntone Server](https://github.com/owntone/owntone-server) from a recordplayer to Airplay device, without using a RIAA pre-amp (this uses the Hifiberry RIAA software preamp).
 
 The script auto-detects if a record is playing and automatically starts streaming. After X amount of seconds (default 300 / 5min) the stream disconnects.
 
@@ -46,10 +46,10 @@ Setup PGA Gain Left & Right to 12db (24)
 wget -q -O - https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone.gpg | sudo gpg --dearmor --output /usr/share/keyrings/owntone-archive-keyring.gpg
 wget -q -O /etc/apt/sources.list.d/owntone.list https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone-trixie.list
 apt update
-apt install owntone alsa-utils sox bc curl jq git build-essential ladspa-sdk
+apt install owntone alsa-utils sox bc curl jq git build-essential ladspa-sdk lv2-dev libsndfile1-dev
 ```
 
-Install RIAA LADSPA plugin:
+## Install RIAA LADSPA plugin:
 
 ```
 cd ~
