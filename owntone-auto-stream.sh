@@ -31,38 +31,86 @@ for var in "${required_vars[@]}"; do
 done
 
 STREAM_PID=""
+MONITOR_PID=""
+MONITOR_FIFO="/tmp/owntone-monitor-$$.fifo"
 SILENCE_COUNT=0
+SILENCE_START_TS=""
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
-check_audio_level() {
-    arecord -D "$MONITOR_DEV" -f cd -d 1 /tmp/check.wav 2>/dev/null
+get_owntone_state() {
+    curl -s "$OWNTONE_BASE_URL/api/player" \
+        | jq -r '.state // .playback_state // .player.state // empty'
+}
 
-    if [ ! -f /tmp/check.wav ]; then
-        echo "-100"
+is_owntone_playing() {
+    local state
+    state=$(get_owntone_state)
+    [ "$state" = "play" ] || [ "$state" = "playing" ]
+}
+
+ensure_owntone_playing() {
+    local retries="${OWNTONE_PLAY_RETRIES:-5}"
+    local retry_delay="${OWNTONE_PLAY_RETRY_DELAY:-1}"
+    local attempt=1
+    local state=""
+
+    while [ "$attempt" -le "$retries" ]; do
+        if is_owntone_playing; then
+            return 0
+        fi
+
+        state=$(get_owntone_state)
+        log "OwnTone not playing yet (state: ${state:-unknown}), attempt ${attempt}/${retries}"
+        curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
+        sleep "$retry_delay"
+        attempt=$((attempt + 1))
+    done
+
+    state=$(get_owntone_state)
+    log "OwnTone still not playing after ${retries} attempts (state: ${state:-unknown})"
+    return 1
+}
+
+start_monitor() {
+    local sample_duration="${AUDIO_SAMPLE_DURATION:-$CHECK_INTERVAL}"
+
+    if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
         return
     fi
 
-    FILE_SIZE=$(stat -c%s /tmp/check.wav 2>/dev/null)
-    if [ "$FILE_SIZE" -lt 50000 ]; then
-        rm -f /tmp/check.wav
-        echo "-100"
-        return
+    rm -f "$MONITOR_FIFO"
+    mkfifo "$MONITOR_FIFO"
+
+    log "Starting monitor process..."
+    (
+        sox -q -t alsa "$MONITOR_DEV" -n stats "$sample_duration" 2>&1 \
+            | awk '/RMS lev dB/ {
+                db = $4
+                if (db == "-inf" || db == "inf" || db == "nan" || db == "-nan") {
+                    db = -100
+                }
+                printf "%.0f\n", db
+                fflush()
+            }'
+    ) > "$MONITOR_FIFO" &
+
+    MONITOR_PID=$!
+    exec 3<"$MONITOR_FIFO"
+}
+
+stop_monitor() {
+    exec 3<&- 2>/dev/null
+
+    if [ -n "$MONITOR_PID" ]; then
+        kill "$MONITOR_PID" 2>/dev/null
+        wait "$MONITOR_PID" 2>/dev/null
+        MONITOR_PID=""
     fi
 
-    STATS=$(sox /tmp/check.wav -n stat 2>&1)
-    RMS=$(echo "$STATS" | grep "RMS.*amplitude" | awk '{print $3}')
-    rm -f /tmp/check.wav
-
-    if [ -z "$RMS" ] || [ "$(echo "$RMS > 0" | bc -l 2>/dev/null)" != "1" ]; then
-        echo "-100"
-        return
-    fi
-
-    DB=$(echo "20 * l($RMS) / l(10)" | bc -l 2>/dev/null)
-    printf "%.0f" "$DB" 2>/dev/null || echo "-100"
+    rm -f "$MONITOR_FIFO"
 }
 
 start_stream() {
@@ -76,14 +124,14 @@ start_stream() {
 
         STREAM_PID=$!
         SILENCE_COUNT=0
+        SILENCE_START_TS=""
 
         ID=$(curl -s "$OWNTONE_BASE_URL/api/outputs" \
             | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
             | head -n1)
 
         curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
-        sleep 1
-        curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
+        ensure_owntone_playing
 
         if [ -n "${OWNTONE_VOLUME:-}" ]; then
             curl -s -X PUT "$OWNTONE_BASE_URL/api/player/volume?volume=$OWNTONE_VOLUME" >/dev/null
@@ -99,25 +147,25 @@ stop_stream() {
         wait $STREAM_PID 2>/dev/null
 
         curl -s -X POST "$OWNTONE_BASE_URL/api/player/stop" >/dev/null
-        #curl -s -X PUT "$OWNTONE_BASE_URL/api/queue/clear" >/dev/null
 
         log "✓ Stopped stream after ${SILENCE_COUNT}s of silence"
         STREAM_PID=""
         SILENCE_COUNT=0
+        SILENCE_START_TS=""
     fi
 }
 
 cleanup() {
     log "Shutting down..."
     stop_stream
-    rm -f /tmp/check.wav
+    stop_monitor
     exit 0
 }
 
 trap cleanup SIGTERM SIGINT EXIT
 
 log "=========================================="
-log "HiFiBerry Auto-Stream"
+log "On audio input, auto stream to Airplay device"
 log "=========================================="
 log "Source: $STREAM_DEV"
 log "Monitor: $MONITOR_DEV (dsnoop)"
@@ -132,6 +180,7 @@ fi
 log "Owntone URI: $OWNTONE_STREAM_URI"
 log "Threshold: ${THRESHOLD}dB"
 log "Check interval: ${CHECK_INTERVAL}s"
+log "Sample duration: ${AUDIO_SAMPLE_DURATION:-$CHECK_INTERVAL}s"
 log "Stop after: ${SILENCE_TIMEOUT}s silence"
 log "=========================================="
 
@@ -141,13 +190,23 @@ if [ ! -p "$FIFO_PATH" ]; then
     mkfifo "$FIFO_PATH"
 fi
 
-# Test
+start_monitor
 log "Testing monitor device..."
-TEST_LEVEL=$(check_audio_level)
-log "Initial level: ${TEST_LEVEL}dB"
+if read -r -t 2 TEST_LEVEL <&3; then
+    log "Initial level: ${TEST_LEVEL}dB"
+else
+    log "No initial monitor level received within 2s"
+fi
 
 while true; do
-    DB_INT=$(check_audio_level)
+    if ! read -r -t "$CHECK_INTERVAL" DB_INT <&3; then
+        if [ -n "$MONITOR_PID" ] && ! kill -0 "$MONITOR_PID" 2>/dev/null; then
+            log "Monitor process stopped, restarting..."
+            stop_monitor
+            start_monitor
+        fi
+        continue
+    fi
 
     if [ -n "$STREAM_PID" ] && kill -0 $STREAM_PID 2>/dev/null; then
         log "Streaming - Level: ${DB_INT}dB"
@@ -157,8 +216,13 @@ while true; do
                 log "Audio resumed"
             fi
             SILENCE_COUNT=0
+            SILENCE_START_TS=""
         else
-            ((SILENCE_COUNT += CHECK_INTERVAL))
+            if [ -z "$SILENCE_START_TS" ]; then
+                SILENCE_START_TS=$(date +%s.%N)
+            fi
+
+            SILENCE_COUNT=$(awk -v start="$SILENCE_START_TS" -v now="$(date +%s.%N)" 'BEGIN {printf "%.0f", (now - start)}')
             log "Silence: ${SILENCE_COUNT}s / ${SILENCE_TIMEOUT}s"
 
             if [ $SILENCE_COUNT -ge $SILENCE_TIMEOUT ]; then
@@ -174,7 +238,6 @@ while true; do
         fi
 
         SILENCE_COUNT=0
+        SILENCE_START_TS=""
     fi
-
-    sleep $CHECK_INTERVAL
 done
