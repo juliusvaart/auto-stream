@@ -90,7 +90,7 @@ start_monitor() {
 
     log "Starting monitor process..."
     (
-        arecord -D "$MONITOR_DEV" -f S16_LE -c 2 -r 44100 -t raw --buffer-size=131072 --period-size=32768 2>>"$MONITOR_LOG" \
+        arecord -q -D "$MONITOR_DEV" -f S16_LE -c 2 -r 44100 -t raw --buffer-size=131072 --period-size=32768 2>>"$MONITOR_LOG" \
             | perl -e '
                 use strict;
                 use warnings;
