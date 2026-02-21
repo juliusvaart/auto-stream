@@ -34,6 +34,7 @@ STREAM_PID=""
 MONITOR_PID=""
 MONITOR_FIFO="/tmp/owntone-monitor-$$.fifo"
 MONITOR_LOG="${MONITOR_LOG_PATH:-/tmp/owntone-monitor.log}"
+STREAM_LOG="${STREAM_LOG_PATH:-/tmp/owntone-stream.log}"
 SILENCE_COUNT=0
 SILENCE_START_TS=""
 NO_LEVEL_WARN_TS=0
@@ -87,6 +88,7 @@ start_monitor() {
     rm -f "$MONITOR_FIFO"
     mkfifo "$MONITOR_FIFO"
     chunk_frames=$(awk -v d="$sample_duration" 'BEGIN { v=int(d*44100); if (v < 1) v=1; print v }')
+    echo "$(date '+%Y-%m-%d %H:%M:%S') monitor start: dev=$MONITOR_DEV sample_duration=${sample_duration}s chunk_frames=$chunk_frames" >> "$MONITOR_LOG"
 
     log "Starting monitor process..."
     (
@@ -114,6 +116,10 @@ start_monitor() {
 }
 
 stop_monitor() {
+    if [ -n "$MONITOR_PID" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') monitor stop: pid=$MONITOR_PID" >> "$MONITOR_LOG"
+    fi
+
     exec 3<&- 2>/dev/null
 
     if [ -n "$MONITOR_PID" ]; then
@@ -129,12 +135,22 @@ start_stream() {
     if [ -z "$STREAM_PID" ] || ! kill -0 $STREAM_PID 2>/dev/null; then
         log "Starting stream..."
 
-        arecord -D "$STREAM_DEV" \
+        arecord -q -D "$STREAM_DEV" \
           -f S16_LE -c 2 -r 44100 -t raw \
           --buffer-size=524288 --period-size=131072 \
-          > "$FIFO_PATH" &
+          > "$FIFO_PATH" 2>>"$STREAM_LOG" &
 
         STREAM_PID=$!
+        sleep 0.2
+        if ! kill -0 "$STREAM_PID" 2>/dev/null; then
+            log "Stream capture failed to stay running (device/FIFO/permissions issue)"
+            if [ -f "$STREAM_LOG" ]; then
+                log "Stream error: $(tail -n1 "$STREAM_LOG")"
+            fi
+            STREAM_PID=""
+            return 1
+        fi
+
         SILENCE_COUNT=0
         SILENCE_START_TS=""
 
@@ -142,8 +158,16 @@ start_stream() {
             | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
             | head -n1)
 
+        if [ -z "$ID" ] || [ "$ID" = "null" ]; then
+            log "Owntone output not found: $OUTPUT_NAME"
+            return 1
+        fi
+
         curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
-        ensure_owntone_playing
+        if ! ensure_owntone_playing; then
+            log "Owntone failed to enter playing state"
+            return 1
+        fi
 
         if [ -n "${OWNTONE_VOLUME:-}" ]; then
             curl -s -X PUT "$OWNTONE_BASE_URL/api/player/volume?volume=$OWNTONE_VOLUME" >/dev/null
