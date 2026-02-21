@@ -86,7 +86,7 @@ start_monitor() {
 
     log "Starting monitor process..."
     (
-        sox -q -t alsa "$MONITOR_DEV" -n stats "$sample_duration" 2>&1 \
+        sox -q -t alsa "$MONITOR_DEV" -n stats -w "$sample_duration" 2>&1 \
             | awk '/RMS lev dB/ {
                 db = $4
                 if (db == "-inf" || db == "inf" || db == "nan" || db == "-nan") {
@@ -204,6 +204,7 @@ while true; do
             log "Monitor process stopped, restarting..."
             stop_monitor
             start_monitor
+            sleep "${MONITOR_RESTART_DELAY:-1}"
         fi
         continue
     fi
