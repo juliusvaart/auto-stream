@@ -33,6 +33,7 @@ done
 STREAM_PID=""
 MONITOR_PID=""
 MONITOR_FIFO="/tmp/owntone-monitor-$$.fifo"
+MONITOR_LOG="/tmp/owntone-monitor-$$.log"
 SILENCE_COUNT=0
 SILENCE_START_TS=""
 
@@ -82,13 +83,15 @@ start_monitor() {
     fi
 
     rm -f "$MONITOR_FIFO"
+    rm -f "$MONITOR_LOG"
     mkfifo "$MONITOR_FIFO"
 
     log "Starting monitor process..."
     (
         sox -q -t alsa "$MONITOR_DEV" -n stats -w "$sample_duration" 2>&1 \
-            | awk '/RMS lev dB/ {
-                db = $4
+            | tee -a "$MONITOR_LOG" \
+            | awk '/RMS/ && /dB/ {
+                db = $NF
                 if (db == "-inf" || db == "inf" || db == "nan" || db == "-nan") {
                     db = -100
                 }
@@ -111,6 +114,7 @@ stop_monitor() {
     fi
 
     rm -f "$MONITOR_FIFO"
+    rm -f "$MONITOR_LOG"
 }
 
 start_stream() {
@@ -195,7 +199,14 @@ log "Testing monitor device..."
 if read -r -t 2 TEST_LEVEL <&3; then
     log "Initial level: ${TEST_LEVEL}dB"
 else
-    log "No initial monitor level received within 2s"
+    if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
+        log "No initial monitor level received within 2s (monitor alive, waiting for audio)"
+    else
+        log "No initial monitor level received within 2s (monitor exited)"
+        if [ -f "$MONITOR_LOG" ]; then
+            log "Monitor error: $(tail -n1 "$MONITOR_LOG")"
+        fi
+    fi
 fi
 
 while true; do
