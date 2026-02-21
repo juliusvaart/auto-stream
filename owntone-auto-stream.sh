@@ -88,7 +88,7 @@ start_monitor() {
 
     log "Starting monitor process..."
     (
-        sox -t alsa "$MONITOR_DEV" -n stats -w "$sample_duration" 2>&1 \
+        SOX_OPTS= sox -V1 -t alsa "$MONITOR_DEV" -n stats -w "$sample_duration" 2>&1 \
             | tr '\r' '\n' \
             | tee -a "$MONITOR_LOG" \
             | awk '/RMS/ && /dB/ {
