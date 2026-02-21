@@ -78,6 +78,7 @@ ensure_owntone_playing() {
 
 start_monitor() {
     local sample_duration="${AUDIO_SAMPLE_DURATION:-$CHECK_INTERVAL}"
+    local chunk_frames
 
     if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
         return
@@ -85,20 +86,27 @@ start_monitor() {
 
     rm -f "$MONITOR_FIFO"
     mkfifo "$MONITOR_FIFO"
+    chunk_frames=$(awk -v d="$sample_duration" 'BEGIN { v=int(d*44100); if (v < 1) v=1; print v }')
 
     log "Starting monitor process..."
     (
-        SOX_OPTS= sox -V1 -t alsa "$MONITOR_DEV" -n stats -w "$sample_duration" 2>&1 \
-            | tr '\r' '\n' \
-            | tee -a "$MONITOR_LOG" \
-            | awk '/RMS/ && /dB/ {
-                db = $NF
-                if (db == "-inf" || db == "inf" || db == "nan" || db == "-nan") {
-                    db = -100
+        arecord -D "$MONITOR_DEV" -f S16_LE -c 2 -r 44100 -t raw --buffer-size=131072 --period-size=32768 2>>"$MONITOR_LOG" \
+            | perl -e '
+                use strict;
+                use warnings;
+                my $chunk_frames = $ARGV[0];
+                my $chunk_bytes = $chunk_frames * 4; # 2 channels x 16-bit
+                while (read(STDIN, my $buf, $chunk_bytes)) {
+                    my @s = unpack("s<*", $buf);
+                    my $n = scalar @s;
+                    next if $n == 0;
+                    my $sum = 0;
+                    $sum += $_ * $_ for @s;
+                    my $rms = sqrt($sum / $n) / 32768.0;
+                    my $db = $rms > 0 ? int((20 * log($rms) / log(10)) + 0.5) : -100;
+                    print "$db\n";
                 }
-                printf "%.0f\n", db
-                fflush()
-            }'
+            ' "$chunk_frames"
     ) > "$MONITOR_FIFO" &
 
     MONITOR_PID=$!
