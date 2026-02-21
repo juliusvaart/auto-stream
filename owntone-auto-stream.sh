@@ -33,7 +33,7 @@ done
 STREAM_PID=""
 MONITOR_PID=""
 MONITOR_FIFO="/tmp/owntone-monitor-$$.fifo"
-MONITOR_LOG="/tmp/owntone-monitor-$$.log"
+MONITOR_LOG="${MONITOR_LOG_PATH:-/tmp/owntone-monitor.log}"
 SILENCE_COUNT=0
 SILENCE_START_TS=""
 NO_LEVEL_WARN_TS=0
@@ -84,7 +84,6 @@ start_monitor() {
     fi
 
     rm -f "$MONITOR_FIFO"
-    rm -f "$MONITOR_LOG"
     mkfifo "$MONITOR_FIFO"
 
     log "Starting monitor process..."
@@ -116,7 +115,6 @@ stop_monitor() {
     fi
 
     rm -f "$MONITOR_FIFO"
-    rm -f "$MONITOR_LOG"
 }
 
 start_stream() {
