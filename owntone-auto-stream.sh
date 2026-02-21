@@ -98,6 +98,7 @@ stop_stream() {
         wait $STREAM_PID 2>/dev/null
 
         curl -s -X POST "$OWNTONE_BASE_URL/api/player/stop" >/dev/null
+        curl -s -X PUT "$OWNTONE_BASE_URL/api/queue/clear" >/dev/null
 
         log "✓ Stopped stream after ${SILENCE_COUNT}s of silence"
         STREAM_PID=""
