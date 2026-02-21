@@ -81,7 +81,8 @@ start_stream() {
             | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
             | head -n1)
 
-        #curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
+        curl -s -X PUT "$OWNTONE_BASE_URL/api/queue/clear" >/dev/null
+        curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
         curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
 
         if [ -n "${OWNTONE_VOLUME:-}" ]; then
@@ -98,7 +99,6 @@ stop_stream() {
         wait $STREAM_PID 2>/dev/null
 
         curl -s -X POST "$OWNTONE_BASE_URL/api/player/stop" >/dev/null
-        #curl -s -X PUT "$OWNTONE_BASE_URL/api/queue/clear" >/dev/null
 
         log "✓ Stopped stream after ${SILENCE_COUNT}s of silence"
         STREAM_PID=""
