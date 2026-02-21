@@ -36,6 +36,7 @@ MONITOR_FIFO="/tmp/owntone-monitor-$$.fifo"
 MONITOR_LOG="/tmp/owntone-monitor-$$.log"
 SILENCE_COUNT=0
 SILENCE_START_TS=""
+NO_LEVEL_WARN_TS=0
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
@@ -216,8 +217,15 @@ while true; do
             stop_monitor
             start_monitor
             sleep "${MONITOR_RESTART_DELAY:-1}"
+            continue
         fi
-        continue
+
+        NOW_TS=$(date +%s)
+        if [ $((NOW_TS - NO_LEVEL_WARN_TS)) -ge 10 ]; then
+            log "Monitor alive but no level sample yet; treating as silence"
+            NO_LEVEL_WARN_TS=$NOW_TS
+        fi
+        DB_INT=-100
     fi
 
     if [ -n "$STREAM_PID" ] && kill -0 $STREAM_PID 2>/dev/null; then
