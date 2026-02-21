@@ -81,7 +81,7 @@ start_stream() {
             | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
             | head -n1)
 
-        curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
+        #curl -s -X POST "$OWNTONE_BASE_URL/api/queue/items/add?clear=true&playback=start&uris=$OWNTONE_STREAM_URI" >/dev/null
         curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
 
         if [ -n "${OWNTONE_VOLUME:-}" ]; then
