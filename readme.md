@@ -46,7 +46,7 @@ Setup PGA Gain Left & Right to 12db (24)
 wget -q -O - https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone.gpg | sudo gpg --dearmor --output /usr/share/keyrings/owntone-archive-keyring.gpg
 wget -q -O /etc/apt/sources.list.d/owntone.list https://raw.githubusercontent.com/owntone/owntone-apt/refs/heads/master/repo/rpi/owntone-trixie.list
 apt update
-apt install owntone alsa-utils sox bc curl jq
+apt install git owntone alsa-utils sox bc curl jq
 ```
 
 Access Owntone: http://HOSTNAME.local:3689
@@ -59,6 +59,12 @@ mkfifo /root/music/pipes/platenspeler.fifo
 ```
 
 The fifo filename is used as now playing metadata.
+
+## Setup Owntone music directory
+
+Edit ```/etc/owntone.conf``` and under ```library {``` change ```directories = {``` to:
+
+```directories = { "/root/music" }```
 
 ## Setup .env
 
@@ -81,5 +87,7 @@ systemctl start auto-stream
 ## BONUS!
 
 Add square artwork (jpg) using the same name as the fifo and place in the same directory. Example:
-- platenspeler.fifo
-- platenspeler.jpg
+/root/music/pipes/platenspeler.fifo
+/root/music/pipes/platenspeler.png
+
+Change SSH-server to OpenSSH to use SFTP run ```dietpi-software```
