@@ -21,9 +21,8 @@ ENV_FILE="$SCRIPT_DIR/.env"
 
 # ── --select-output mode ──────────────────────────────────────────────────────
 
-if [ "${1:-}" = "--select-output" ]; then
-    [ -f "$ENV_FILE" ] || err "No .env found at $ENV_FILE — run install first"
-
+# Shared: wait for OwnTone API, then interactively pick an output
+owntone_select_output() {
     log "Waiting for OwnTone API..."
     for i in $(seq 1 30); do
         if curl -sf "$OWNTONE_BASE_URL/api/config" >/dev/null 2>&1; then break; fi
@@ -31,24 +30,37 @@ if [ "${1:-}" = "--select-output" ]; then
         sleep 1
     done
 
-    SELECTED_OUTPUT=""
-    mapfile -t names < <(curl -s "$OWNTONE_BASE_URL/api/outputs" 2>/dev/null \
-        | jq -r '.outputs[] | select(.type == "airplay") | .name' 2>/dev/null)
-
-    [ "${#names[@]}" -eq 0 ] && err "No Airplay outputs found"
+    # Retry to allow mDNS discovery time
+    local names=()
+    for i in $(seq 1 12); do
+        mapfile -t names < <(curl -s "$OWNTONE_BASE_URL/api/outputs" 2>/dev/null \
+            | jq -r '.outputs[].name' 2>/dev/null)
+        [ "${#names[@]}" -gt 0 ] && break
+        [ "$i" -eq 12 ] && err "No outputs found after 60s"
+        log "No outputs yet, retrying in 5s..."
+        sleep 5
+    done
 
     echo ""
-    echo -e "${CYAN}Available Airplay outputs:${NC}"
+    echo -e "${CYAN}Available outputs:${NC}"
     for i in "${!names[@]}"; do echo "  $((i+1))) ${names[$i]}"; done
     echo ""
 
+    local sel
     while true; do
-        read -rp "Select Airplay output [1-${#names[@]}]: " sel
+        read -rp "Select output [1-${#names[@]}]: " sel
         if [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#names[@]}" ]; then
             SELECTED_OUTPUT="${names[$((sel-1))]}"; break
         fi
         echo "Invalid selection, try again"
     done
+}
+
+if [ "${1:-}" = "--select-output" ]; then
+    [ -f "$ENV_FILE" ] || err "No .env found at $ENV_FILE — run install first"
+
+    SELECTED_OUTPUT=""
+    owntone_select_output
 
     if grep -q '^OUTPUT_NAME=' "$ENV_FILE"; then
         sed -i "s|^OUTPUT_NAME=.*|OUTPUT_NAME=$SELECTED_OUTPUT|" "$ENV_FILE"
@@ -136,54 +148,10 @@ systemctl enable auto-stream
 log "Starting OwnTone..."
 systemctl restart owntone
 
-# Wait for OwnTone API to be ready
-log "Waiting for OwnTone API..."
-for i in $(seq 1 30); do
-    if curl -sf "$OWNTONE_BASE_URL/api/config" >/dev/null 2>&1; then
-        break
-    fi
-    if [ "$i" -eq 30 ]; then
-        warn "OwnTone API not responding — skipping Airplay selection"
-    fi
-    sleep 1
-done
-
-# ── Select Airplay output ─────────────────────────────────────────────────────
+# ── Select output ────────────────────────────────────────────────────────────
 
 SELECTED_OUTPUT=""
-
-select_airplay_output() {
-    local raw
-    raw=$(curl -s "$OWNTONE_BASE_URL/api/outputs" 2>/dev/null)
-
-    local names
-    mapfile -t names < <(echo "$raw" | jq -r '.outputs[] | select(.type == "airplay") | .name' 2>/dev/null)
-
-    if [ "${#names[@]}" -eq 0 ]; then
-        warn "No Airplay outputs found. Set OUTPUT_NAME in $ENV_FILE after adding Airplay devices."
-        return
-    fi
-
-    echo ""
-    echo -e "${CYAN}Available Airplay outputs:${NC}"
-    for i in "${!names[@]}"; do
-        echo "  $((i+1))) ${names[$i]}"
-    done
-    echo ""
-
-    local selection
-    while true; do
-        read -rp "Select Airplay output [1-${#names[@]}]: " selection
-        if [[ "$selection" =~ ^[0-9]+$ ]] && \
-           [ "$selection" -ge 1 ] && [ "$selection" -le "${#names[@]}" ]; then
-            SELECTED_OUTPUT="${names[$((selection-1))]}"
-            break
-        fi
-        echo "Invalid selection, try again"
-    done
-}
-
-select_airplay_output
+owntone_select_output
 
 # ── Auto-detect OWNTONE_STREAM_URI ────────────────────────────────────────────
 
