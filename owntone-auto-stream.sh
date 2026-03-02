@@ -83,7 +83,7 @@ start_stream() {
 
         curl -s -G -X POST "$OWNTONE_BASE_URL/api/queue/items/add" --data-urlencode "uris=$OWNTONE_STREAM_URI" >/dev/null
         curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
-        curl -s -X POST "$OWNTONE_BASE_URL/api/player/play" >/dev/null
+        curl -s -X PUT "$OWNTONE_BASE_URL/api/player/play" >/dev/null
 
         if [ -n "${OWNTONE_VOLUME:-}" ]; then
             curl -s -X PUT "$OWNTONE_BASE_URL/api/player/volume?volume=$OWNTONE_VOLUME" >/dev/null
@@ -98,8 +98,8 @@ stop_stream() {
         kill $STREAM_PID 2>/dev/null
         wait $STREAM_PID 2>/dev/null
 
-        curl -s -X POST "$OWNTONE_BASE_URL/api/player/stop" >/dev/null
-        curl -s -X PUT "$OWNTONE_BASE_URL/api/queue/clear" >/dev/null
+        curl -s -X PUT "$OWNTONE_BASE_URL/api/player/stop" >/dev/null
+        curl -s -X DELETE "$OWNTONE_BASE_URL/api/queue/items" >/dev/null
 
         log "✓ Stopped stream after ${SILENCE_COUNT}s of silence"
         STREAM_PID=""
