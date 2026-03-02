@@ -81,7 +81,7 @@ start_stream() {
             | jq -r --arg n "$OUTPUT_NAME" '.outputs[] | select(.name==$n) | .id' \
             | head -n1)
 
-        curl -s -G -X POST "$OWNTONE_BASE_URL/api/queue/add" --data-urlencode "uris=$OWNTONE_STREAM_URI" >/dev/null
+        curl -s -G -X POST "$OWNTONE_BASE_URL/api/queue/items/add" --data-urlencode "uris=$OWNTONE_STREAM_URI" >/dev/null
         curl -s -X PUT "$OWNTONE_BASE_URL/api/outputs/set" --data "{\"outputs\":[\"$ID\"]}" >/dev/null
         curl -s -X POST "$OWNTONE_BASE_URL/api/player/play" >/dev/null
 
@@ -139,6 +139,10 @@ mkdir -p "$(dirname "$FIFO_PATH")"
 if [ ! -p "$FIFO_PATH" ]; then
     rm -f "$FIFO_PATH"
     mkfifo "$FIFO_PATH"
+fi
+if [ ! -p "${FIFO_PATH}.metadata" ]; then
+    rm -f "${FIFO_PATH}.metadata"
+    mkfifo "${FIFO_PATH}.metadata"
 fi
 
 # Test
