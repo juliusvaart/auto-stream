@@ -9,8 +9,9 @@ All config is in a .env. In .env.example you can see what to configure.
 ## Buy
 
 - Raspberry Pi 4/5
-- Hifiberry ADC pro
+- [Hifiberry ADC pro](https://www.hifiberry.com/shop/boards/hifiberry-dac-adc-pro/)
 - Audio cable to mini-jack to attach to ADC port
+- A case is nice. [Like this 3D printed one](https://www.thingiverse.com/thing:4753525)
 
 ## Install DietPi
 
@@ -20,8 +21,7 @@ https://dietpi.com/
 
 ## Setup dietpi
 
-- setup hostname
-- setup audio card
+- setup hostname & setup audio card in DietPi Config:
 
 ```dietpi-config```
 
@@ -31,6 +31,24 @@ https://dietpi.com/
 cd ~
 git clone git@github.com:juliusvaart/auto-stream.git
 ```
+
+
+# Install Script
+
+```
+./install.sh
+```
+
+Follow the steps.
+
+## Change Airplay device
+
+```
+./install.sh --select-output
+```
+
+
+# Manual Install
 
 ## Setup .asoundrc and alsamixer
 
