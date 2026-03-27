@@ -167,6 +167,8 @@ while true; do
 
             if [ $SILENCE_COUNT -ge $SILENCE_TIMEOUT ]; then
                 stop_stream
+                log "Listening for audio..."
+                continue
             fi
         fi
     else
