@@ -23,8 +23,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '4567', 10);
 const STREAM_DEV = process.env.STREAM_DEV;
 const EXT_ID = process.env.ROON_EXTENSION_ID || 'com.platenspeler.autostream';
-const EXT_NAME = process.env.ROON_DISPLAY_NAME || 'Platenspeler Auto-Stream';
-const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
+const EXT_NAME = process.env.ROON_DISPLAY_NAME || 'Pro-ject Debut Carbon Esprit';
+//const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
 
 const state = {
     core: null,
@@ -226,7 +226,7 @@ const roon = new RoonApi({
     display_name:    EXT_NAME,
     display_version: '1.0.0',
     publisher:       'Platenspeler',
-    email:           'contact@avecsans.studio',
+    email:           'julius@vanderva.art',
     log_level:       'none',
 
     core_paired: (core) => {
