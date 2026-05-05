@@ -99,7 +99,9 @@ const server = http.createServer((req, res) => {
             log(`Roon disconnected (${state.ffmpegProcs.size - 1} active)`);
         });
     } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
-        res.writeHead(200, { 'Content-Type': 'image/png' });
+        const stat = fs.statSync(ARTWORK_PATH);
+        log(`Artwork requested (${stat.size} bytes)`);
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
         fs.createReadStream(ARTWORK_PATH).pipe(res);
     } else {
         res.writeHead(404).end();
