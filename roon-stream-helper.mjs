@@ -211,15 +211,18 @@ svcSettings = new RoonApiSettings(roon, {
         req.send_complete(layout.has_error ? 'NotValid' : 'Success', { settings: layout });
         if (!isDryRun && !layout.has_error) {
             roon.save_config('settings', settings.values);
-            state.zoneId = settings.values.zone?.zone_id;
+            const z = settings.values.zone;
+            log(`Zone object: ${JSON.stringify(z)}`);
+            state.zoneId = z?.zone_id ?? z?.output_id ?? z;
             log(`Zone set: ${state.zoneId}`);
         }
     },
 });
 
 const saved = roon.load_config('settings') || {};
-if (saved.zone?.zone_id) {
-    state.zoneId = saved.zone.zone_id;
+if (saved.zone) {
+    const z = saved.zone;
+    state.zoneId = z?.zone_id ?? z?.output_id ?? z;
     log(`Restored zone: ${state.zoneId}`);
 }
 
