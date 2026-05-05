@@ -1,0 +1,12 @@
+{
+  "name": "roon-connect-stream",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "node-roon-api": "github:roonlabs/node-roon-api",
+    "node-roon-api-audioinput": "github:roonlabs/node-roon-api-audioinput",
+    "node-roon-api-settings": "github:roonlabs/node-roon-api-settings",
+    "node-roon-api-status": "github:roonlabs/node-roon-api-status"
+  }
+}

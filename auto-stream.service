@@ -1,13 +1,14 @@
 [Unit]
-Description=Autostream ADC input
+Description=Platenspeler Roon Connect Auto-Stream
 After=network.target network-online.target sound.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root
-ExecStart=/root/auto-stream/owntone-auto-stream.sh
+WorkingDirectory=/root/auto-stream
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/root/auto-stream/roon-connect-stream.sh
 Restart=always
 RestartSec=10
 
