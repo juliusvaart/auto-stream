@@ -11,10 +11,12 @@ for (const bin of ['arecord', 'ffmpeg']) {
         process.exit(1);
     }
 }
+
 import RoonApi from 'node-roon-api';
 import RoonApiSettings from 'node-roon-api-settings';
 import RoonApiStatus from 'node-roon-api-status';
 import RoonApiAudioInput from 'node-roon-api-audioinput';
+import RoonApiTransport from 'node-roon-api-transport';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +31,8 @@ const state = {
     session: null,
     arecord: null,
     ffmpeg: null,
-    zoneId: null,
+    zoneId: null,   // raw value from settings (may be zone_id or output_id)
+    zones: [],      // live zone list from subscribe_zones
     clients: new Set(),
     pendingStart: false,
 };
@@ -49,6 +52,16 @@ function getLocalIp() {
 }
 
 const localIp = getLocalIp();
+
+// Resolve a stored zone/output ID to an actual zone_id using the live zone list.
+function resolveZoneId(id) {
+    if (!id) return null;
+    const byZone = state.zones.find(z => z.zone_id === id);
+    if (byZone) return byZone.zone_id;
+    const byOutput = state.zones.find(z => z.outputs?.some(o => o.output_id === id));
+    if (byOutput) return byOutput.zone_id;
+    return null;
+}
 
 const server = http.createServer((req, res) => {
     if (req.url === '/stream') {
@@ -120,15 +133,22 @@ function startSession() {
     }
     if (state.session) { log('Session already active'); return; }
 
+    const resolvedZoneId = resolveZoneId(state.zoneId);
+    if (!resolvedZoneId) {
+        log(`Cannot resolve zone ID "${state.zoneId}" — zone list: ${state.zones.map(z => z.zone_id).join(', ') || '(empty)'}`);
+        state.pendingStart = true;
+        return;
+    }
+
     startAudio();
 
     const streamUrl = `http://${localIp}:${HTTP_PORT}/stream`;
     const artworkUrl = `http://${localIp}:${HTTP_PORT}/artwork.png`;
 
-    log(`Beginning session → zone ${state.zoneId}`);
+    log(`Beginning session → zone ${resolvedZoneId}`);
 
     state.session = state.core.services.RoonApiAudioInput.begin_session(
-        { zone_id: state.zoneId, display_name: EXT_NAME, icon_url: artworkUrl },
+        { zone_id: resolvedZoneId, display_name: EXT_NAME, icon_url: artworkUrl },
         (msg, body) => {
             if (msg === 'SessionBegan') {
                 state.core.services.RoonApiAudioInput.update_transport_controls({
@@ -196,16 +216,36 @@ const roon = new RoonApi({
         state.core = core;
         log(`Paired with: ${core.display_name}`);
         svcStatus.set_status('Connected — ready to stream', false);
-        if (state.pendingStart) {
-            state.pendingStart = false;
-            log('Resuming pending start after pairing');
-            startSession();
-        }
+
+        core.services.RoonApiTransport.subscribe_zones((response, msg) => {
+            if (response === 'Subscribed') {
+                state.zones = msg.zones || [];
+                log(`Zones: ${state.zones.map(z => `${z.display_name} (${z.zone_id})`).join(', ')}`);
+            } else if (response === 'Changed') {
+                if (msg.zones_added)   state.zones.push(...msg.zones_added);
+                if (msg.zones_removed) {
+                    const removed = new Set(msg.zones_removed.map(z => z.zone_id));
+                    state.zones = state.zones.filter(z => !removed.has(z.zone_id));
+                }
+                if (msg.zones_changed) {
+                    for (const z of msg.zones_changed) {
+                        const i = state.zones.findIndex(x => x.zone_id === z.zone_id);
+                        if (i >= 0) state.zones[i] = z;
+                    }
+                }
+            }
+            if (state.pendingStart) {
+                state.pendingStart = false;
+                log('Resuming pending start after zone sync');
+                startSession();
+            }
+        });
     },
 
     core_unpaired: (core) => {
         log(`Unpaired from: ${core.display_name}`);
         state.core = null;
+        state.zones = [];
         state.session = null;
         stopAudio();
     },
@@ -248,7 +288,7 @@ svcStatus = new RoonApiStatus(roon);
 
 roon.init_services({
     provided_services: [svcSettings, svcStatus],
-    required_services: [RoonApiAudioInput],
+    required_services: [RoonApiAudioInput, RoonApiTransport],
 });
 
 log(`Starting Roon discovery (${EXT_ID})`);
