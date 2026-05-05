@@ -29,11 +29,10 @@ const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
 const state = {
     core: null,
     session: null,
-    arecord: null,
-    ffmpeg: null,
+    arecord: null,          // single long-running capture process
+    ffmpegProcs: new Set(), // one ffmpeg per active HTTP connection
     zoneId: null,   // raw value from settings (may be zone_id or output_id)
     zones: [],      // live zone list from subscribe_zones
-    clients: new Set(),
     pendingStart: false,
     shouldStream: false,  // true between SIGUSR1 and SIGUSR2
     retryTimer: null,
@@ -65,18 +64,39 @@ function resolveZoneId(id) {
     return null;
 }
 
+// Each HTTP connection gets its own fresh ffmpeg so Roon always receives a
+// complete FLAC header — required because Roon probes the URL before playback.
 const server = http.createServer((req, res) => {
     if (req.url === '/stream') {
+        if (!state.arecord) {
+            res.writeHead(503).end();
+            return;
+        }
         res.writeHead(200, {
             'Content-Type': 'audio/flac',
             'Cache-Control': 'no-cache',
             'Transfer-Encoding': 'chunked',
         });
-        state.clients.add(res);
-        log(`Roon connected to stream (${state.clients.size} client(s))`);
+
+        const ff = spawn('ffmpeg', [
+            '-f', 's16le', '-ar', '44100', '-ac', '2', '-i', 'pipe:0',
+            '-f', 'flac', '-compression_level', '0', '-',
+        ]);
+        state.ffmpegProcs.add(ff);
+        ff.stderr.on('data', () => {});
+        ff.stdout.on('data', (chunk) => { if (!res.writableEnded) res.write(chunk); });
+        ff.on('exit', (code) => { log(`ffmpeg exited (${code})`); state.ffmpegProcs.delete(ff); });
+
+        // Wire arecord → this ffmpeg
+        state.arecord.stdout.on('data', onAudioData);
+        function onAudioData(chunk) { if (!ff.stdin.destroyed) ff.stdin.write(chunk); }
+
+        log(`Roon connected (${state.ffmpegProcs.size} active)`);
         req.on('close', () => {
-            state.clients.delete(res);
-            log(`Roon disconnected (${state.clients.size} client(s) remaining)`);
+            state.arecord?.stdout.removeListener('data', onAudioData);
+            ff.stdin.end();
+            ff.kill('SIGTERM');
+            log(`Roon disconnected (${state.ffmpegProcs.size - 1} active)`);
         });
     } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
         res.writeHead(200, { 'Content-Type': 'image/png' });
@@ -91,40 +111,21 @@ server.listen(HTTP_PORT, () => log(`Stream server on http://${localIp}:${HTTP_PO
 function startAudio() {
     if (state.arecord) return;
 
-    log(`Starting audio pipeline (${STREAM_DEV})`);
+    log(`Starting audio capture (${STREAM_DEV})`);
 
     state.arecord = spawn('arecord', [
         '-D', STREAM_DEV, '-f', 'S16_LE', '-c', '2', '-r', '44100', '-t', 'raw',
         '--buffer-size=524288', '--period-size=131072',
     ]);
-
-    state.ffmpeg = spawn('ffmpeg', [
-        '-f', 's16le', '-ar', '44100', '-ac', '2', '-i', 'pipe:0',
-        '-f', 'flac', '-compression_level', '0', '-',
-    ]);
-
-    state.arecord.stdout.pipe(state.ffmpeg.stdin);
     state.arecord.stderr.on('data', () => {});
-    state.ffmpeg.stderr.on('data', () => {});
-
-    state.ffmpeg.stdout.on('data', (chunk) => {
-        for (const client of state.clients) {
-            if (!client.writableEnded) client.write(chunk);
-            else state.clients.delete(client);
-        }
-    });
-
     state.arecord.on('exit', (code) => { log(`arecord exited (${code})`); state.arecord = null; });
-    state.ffmpeg.on('exit', (code) => { log(`ffmpeg exited (${code})`); state.ffmpeg = null; });
 }
 
 function stopAudio() {
     state.arecord?.kill('SIGTERM');
-    state.ffmpeg?.kill('SIGTERM');
     state.arecord = null;
-    state.ffmpeg = null;
-    for (const client of state.clients) client.end();
-    state.clients.clear();
+    for (const ff of state.ffmpegProcs) ff.kill('SIGTERM');
+    state.ffmpegProcs.clear();
 }
 
 function startSession() {
