@@ -2,8 +2,15 @@ import os from 'os';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
+
+for (const bin of ['arecord', 'ffmpeg']) {
+    if (spawnSync('which', [bin]).status !== 0) {
+        process.stderr.write(`Missing required binary: ${bin}\n`);
+        process.exit(1);
+    }
+}
 import RoonApi from 'node-roon-api';
 import RoonApiSettings from 'node-roon-api-settings';
 import RoonApiStatus from 'node-roon-api-status';
@@ -46,7 +53,7 @@ const localIp = getLocalIp();
 const server = http.createServer((req, res) => {
     if (req.url === '/stream') {
         res.writeHead(200, {
-            'Content-Type': 'audio/mpeg',
+            'Content-Type': 'audio/flac',
             'Cache-Control': 'no-cache',
             'Transfer-Encoding': 'chunked',
         });
@@ -78,7 +85,7 @@ function startAudio() {
 
     state.ffmpeg = spawn('ffmpeg', [
         '-f', 's16le', '-ar', '44100', '-ac', '2', '-i', 'pipe:0',
-        '-f', 'mp3', '-b:a', '320k', '-',
+        '-f', 'flac', '-compression_level', '0', '-',
     ]);
 
     state.arecord.stdout.pipe(state.ffmpeg.stdin);
