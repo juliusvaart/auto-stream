@@ -24,6 +24,7 @@ const state = {
     ffmpeg: null,
     zoneId: null,
     clients: new Set(),
+    pendingStart: false,
 };
 
 function log(msg) {
@@ -105,8 +106,11 @@ function stopAudio() {
 }
 
 function startSession() {
-    if (!state.core) { log('Cannot start: no Roon core paired'); return; }
-    if (!state.zoneId) { log('Cannot start: no zone configured — open Roon → Settings → Extensions'); return; }
+    if (!state.core || !state.zoneId) {
+        log(`Start requested but not ready (core=${!!state.core}, zone=${!!state.zoneId}) — will start once paired`);
+        state.pendingStart = true;
+        return;
+    }
     if (state.session) { log('Session already active'); return; }
 
     startAudio();
@@ -165,9 +169,11 @@ function stopSession() {
 }
 
 process.on('SIGUSR1', () => { log('SIGUSR1 → start'); startSession(); });
-process.on('SIGUSR2', () => { log('SIGUSR2 → stop'); stopSession(); });
+process.on('SIGUSR2', () => { log('SIGUSR2 → stop'); state.pendingStart = false; stopSession(); });
 process.on('SIGTERM', () => { log('SIGTERM → cleanup'); stopSession(); server.close(); process.exit(0); });
 process.on('SIGINT', () => { log('SIGINT → cleanup'); stopSession(); server.close(); process.exit(0); });
+process.on('uncaughtException', (err) => { log(`CRASH uncaughtException: ${err.stack}`); stopSession(); process.exit(1); });
+process.on('unhandledRejection', (reason) => { log(`CRASH unhandledRejection: ${reason}`); stopSession(); process.exit(1); });
 
 let svcSettings, svcStatus;
 
@@ -183,6 +189,11 @@ const roon = new RoonApi({
         state.core = core;
         log(`Paired with: ${core.display_name}`);
         svcStatus.set_status('Connected — ready to stream', false);
+        if (state.pendingStart) {
+            state.pendingStart = false;
+            log('Resuming pending start after pairing');
+            startSession();
+        }
     },
 
     core_unpaired: (core) => {
