@@ -170,16 +170,17 @@ function startSession() {
                         two_line:   { line1: EXT_NAME, line2: 'Live' },
                         three_line: { line1: EXT_NAME, line2: 'Live', line3: '' },
                     },
-                }, (m) => {
-                    log(`Playback event: ${m}`);
-                    if (['StoppedUser', 'EndedNaturally', 'MediaError', 'ZoneNotFound', 'ZoneLost'].includes(m)) {
+                }, (msg) => {
+                    const event = msg?.name ?? msg;
+                    log(`Playback event: ${event}`);
+                    if (['StoppedUser', 'EndedNaturally', 'MediaError', 'ZoneNotFound', 'ZoneLost'].includes(event)) {
                         state.session = null;
                         stopAudio();
-                        if (m === 'StoppedUser') {
+                        if (event === 'StoppedUser') {
                             log('Stopped by user — waiting for next silence/audio cycle');
                             state.shouldStream = false;
                         } else if (state.shouldStream) {
-                            log(`Session ended (${m}) — retrying in 5s`);
+                            log(`Session ended (${event}) — retrying in 5s`);
                             state.retryTimer = setTimeout(startSession, 5000);
                         }
                     }
