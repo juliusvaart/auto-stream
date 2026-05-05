@@ -15,7 +15,7 @@ const HTTP_PORT = parseInt(process.env.HTTP_PORT || '4567', 10);
 const STREAM_DEV = process.env.STREAM_DEV;
 const EXT_ID = process.env.ROON_EXTENSION_ID || 'com.platenspeler.autostream';
 const EXT_NAME = process.env.ROON_DISPLAY_NAME || 'Platenspeler Auto-Stream';
-const ICON_PATH = path.join(__dirname, 'platenspeler.png');
+const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
 
 const state = {
     core: null,
@@ -55,9 +55,9 @@ const server = http.createServer((req, res) => {
             state.clients.delete(res);
             log(`Roon disconnected (${state.clients.size} client(s) remaining)`);
         });
-    } else if (req.url === '/icon.png' && fs.existsSync(ICON_PATH)) {
+    } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
         res.writeHead(200, { 'Content-Type': 'image/png' });
-        fs.createReadStream(ICON_PATH).pipe(res);
+        fs.createReadStream(ARTWORK_PATH).pipe(res);
     } else {
         res.writeHead(404).end();
     }
@@ -112,12 +112,12 @@ function startSession() {
     startAudio();
 
     const streamUrl = `http://${localIp}:${HTTP_PORT}/stream`;
-    const iconUrl = `http://${localIp}:${HTTP_PORT}/icon.png`;
+    const artworkUrl = `http://${localIp}:${HTTP_PORT}/artwork.png`;
 
     log(`Beginning session → zone ${state.zoneId}`);
 
     state.session = state.core.services.RoonApiAudioInput.begin_session(
-        { zone_id: state.zoneId, display_name: EXT_NAME, icon_url: iconUrl },
+        { zone_id: state.zoneId, display_name: EXT_NAME, icon_url: artworkUrl },
         (msg, body) => {
             if (msg === 'SessionBegan') {
                 state.core.services.RoonApiAudioInput.update_transport_controls({
