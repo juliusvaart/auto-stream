@@ -35,6 +35,8 @@ const state = {
     zones: [],      // live zone list from subscribe_zones
     clients: new Set(),
     pendingStart: false,
+    shouldStream: false,  // true between SIGUSR1 and SIGUSR2
+    retryTimer: null,
 };
 
 function log(msg) {
@@ -173,6 +175,13 @@ function startSession() {
                     if (['StoppedUser', 'EndedNaturally', 'MediaError', 'ZoneNotFound', 'ZoneLost'].includes(m)) {
                         state.session = null;
                         stopAudio();
+                        if (m === 'StoppedUser') {
+                            log('Stopped by user — waiting for next silence/audio cycle');
+                            state.shouldStream = false;
+                        } else if (state.shouldStream) {
+                            log(`Session ended (${m}) — retrying in 5s`);
+                            state.retryTimer = setTimeout(startSession, 5000);
+                        }
                     }
                 });
 
@@ -181,6 +190,10 @@ function startSession() {
                 log(`Session ended: ${msg}`);
                 state.session = null;
                 stopAudio();
+                if (state.shouldStream) {
+                    log(`Retrying in 5s`);
+                    state.retryTimer = setTimeout(startSession, 5000);
+                }
             }
         }
     );
@@ -195,8 +208,8 @@ function stopSession() {
     stopAudio();
 }
 
-process.on('SIGUSR1', () => { log('SIGUSR1 → start'); startSession(); });
-process.on('SIGUSR2', () => { log('SIGUSR2 → stop'); state.pendingStart = false; stopSession(); });
+process.on('SIGUSR1', () => { log('SIGUSR1 → start'); state.shouldStream = true; startSession(); });
+process.on('SIGUSR2', () => { log('SIGUSR2 → stop'); state.shouldStream = false; state.pendingStart = false; clearTimeout(state.retryTimer); stopSession(); });
 process.on('SIGTERM', () => { log('SIGTERM → cleanup'); stopSession(); server.close(); process.exit(0); });
 process.on('SIGINT', () => { log('SIGINT → cleanup'); stopSession(); server.close(); process.exit(0); });
 process.on('uncaughtException', (err) => { log(`CRASH uncaughtException: ${err.stack}`); stopSession(); process.exit(1); });
