@@ -22,8 +22,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '4567', 10);
 const STREAM_DEV = process.env.STREAM_DEV;
-const EXT_ID = process.env.ROON_EXTENSION_ID || 'com.platenspeler.autostream';
-const EXT_NAME = process.env.ROON_DISPLAY_NAME || 'Pro-ject Debut Carbon Esprit';
+const EXT_ID = process.env.ROON_EXTENSION_ID || 'com.recordplayer.autostream';
+const EXT_NAME = process.env.ROON_DISPLAY_NAME || 'Record player';
+const EXT_LINE2 = process.env.ROON_DISPLAY_LINE2 || 'Streaming live';
 //const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
 
 const state = {
@@ -98,11 +99,11 @@ const server = http.createServer((req, res) => {
             ff.kill('SIGTERM');
             log(`Roon disconnected (${state.ffmpegProcs.size - 1} active)`);
         });
-    } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
-        const stat = fs.statSync(ARTWORK_PATH);
-        log(`Artwork requested (${stat.size} bytes)`);
-        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
-        fs.createReadStream(ARTWORK_PATH).pipe(res);
+    // } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
+    //     const stat = fs.statSync(ARTWORK_PATH);
+    //     log(`Artwork requested (${stat.size} bytes)`);
+    //     res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
+    //     fs.createReadStream(ARTWORK_PATH).pipe(res);
     } else {
         res.writeHead(404).end();
     }
