@@ -16,10 +16,13 @@ Detects audio from a record player via ALSA, streams it to Roon via the AudioInp
 sudo apt install -y alsa-utils sox ffmpeg bc
 
 # SongRec (Shazam-based song recognition)
-wget -qO- 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x6888550b2fc77d09' \
-  | sudo tee /etc/apt/trusted.gpg.d/songrec.asc
-sudo apt-add-repository ppa:marin-m/songrec -y -u
-sudo apt install -y songrec
+apt install rustup libasound2-dev gcc build-essential libc6-dev pkg-config libglib2.0-dev libsoup-3.0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev -y
+rustup default stable
+cargo install songrec --no-default-features -F ffmpeg
+
+# Add Cargo to PATH
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' | tee -a ~/.profile ~/.bashrc
+source ~/.bashrc
 
 # Node.js (v18+ required)
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
