@@ -1,5 +1,6 @@
 import os from 'os';
 import http from 'http';
+import https from 'https';
 import path from 'path';
 import fs from 'fs';
 import { spawn, spawnSync } from 'child_process';
@@ -27,6 +28,9 @@ const EXT_NAME = process.env.ROON_DISPLAY_NAME || 'Record player';
 const EXT_LINE2 = process.env.ROON_DISPLAY_LINE2 || 'Streaming live';
 const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
 
+const AUDIO_BUFFER_SIZE = 44100 * 2 * 2 * 12; // 12 seconds of S16_LE stereo PCM
+const RECOGNITION_INTERVAL = 30_000;
+
 const state = {
     core: null,
     session: null,
@@ -37,6 +41,11 @@ const state = {
     pendingStart: false,
     shouldStream: false,  // true between SIGUSR1 and SIGUSR2
     retryTimer: null,
+    audioBuffer: Buffer.alloc(0),
+    artworkData: null,     // Buffer of downloaded cover art (replaces platenspeler.png when recognized)
+    artworkType: 'image/jpeg',
+    recognitionTimer: null,
+    currentSessionId: null,
 };
 
 function log(msg) {
@@ -54,6 +63,7 @@ function getLocalIp() {
 }
 
 const localIp = getLocalIp();
+const artworkUrl = `http://${localIp}:${HTTP_PORT}/artwork.png`;
 
 // Resolve a stored zone/output ID to an actual zone_id using the live zone list.
 function resolveZoneId(id) {
@@ -99,17 +109,31 @@ const server = http.createServer((req, res) => {
             ff.kill('SIGTERM');
             log(`Roon disconnected (${state.ffmpegProcs.size - 1} active)`);
         });
-    } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
-        const stat = fs.statSync(ARTWORK_PATH);
-        log(`Artwork requested (${stat.size} bytes)`);
-        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
-        fs.createReadStream(ARTWORK_PATH).pipe(res);
+    } else if (req.url === '/artwork.png') {
+        if (state.artworkData) {
+            res.writeHead(200, { 'Content-Type': state.artworkType, 'Content-Length': state.artworkData.length });
+            res.end(state.artworkData);
+        } else if (fs.existsSync(ARTWORK_PATH)) {
+            const stat = fs.statSync(ARTWORK_PATH);
+            log(`Artwork requested (${stat.size} bytes)`);
+            res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
+            fs.createReadStream(ARTWORK_PATH).pipe(res);
+        } else {
+            res.writeHead(404).end();
+        }
     } else {
         res.writeHead(404).end();
     }
 });
 
 server.listen(HTTP_PORT, () => log(`Stream server on http://${localIp}:${HTTP_PORT}`));
+
+function onAudioForRecognition(chunk) {
+    state.audioBuffer = Buffer.concat([state.audioBuffer, chunk]);
+    if (state.audioBuffer.length > AUDIO_BUFFER_SIZE) {
+        state.audioBuffer = state.audioBuffer.subarray(state.audioBuffer.length - AUDIO_BUFFER_SIZE);
+    }
+}
 
 function startAudio() {
     if (state.arecord) return;
@@ -121,14 +145,115 @@ function startAudio() {
         '--buffer-size=524288', '--period-size=131072',
     ]);
     state.arecord.stderr.on('data', () => {});
+    state.arecord.stdout.on('data', onAudioForRecognition);
     state.arecord.on('exit', (code) => { log(`arecord exited (${code})`); state.arecord = null; });
 }
 
 function stopAudio() {
     state.arecord?.kill('SIGTERM');
     state.arecord = null;
+    state.audioBuffer = Buffer.alloc(0);
     for (const ff of state.ffmpegProcs) ff.kill('SIGTERM');
     state.ffmpegProcs.clear();
+}
+
+async function recognizeSong() {
+    const MIN_BYTES = 44100 * 2 * 2 * 5; // at least 5 seconds of audio
+    if (state.audioBuffer.length < MIN_BYTES) return null;
+
+    const snapshot = Buffer.from(state.audioBuffer);
+    const tmpFile = `/tmp/songrec-${Date.now()}.wav`;
+
+    await new Promise((resolve) => {
+        const ff = spawn('ffmpeg', [
+            '-f', 's16le', '-ar', '44100', '-ac', '2', '-i', 'pipe:0',
+            '-f', 'wav', '-y', tmpFile,
+        ]);
+        ff.stderr.on('data', () => {});
+        ff.on('exit', resolve);
+        ff.on('error', resolve);
+        ff.stdin.write(snapshot);
+        ff.stdin.end();
+    });
+
+    return new Promise((resolve) => {
+        const sr = spawn('songrec', ['audio-file-to-recognized-song', tmpFile]);
+        let output = '';
+        sr.stdout.on('data', d => { output += d.toString(); });
+        sr.stderr.on('data', () => {});
+        sr.on('exit', () => {
+            fs.unlink(tmpFile, () => {});
+            try { resolve(JSON.parse(output)?.track ?? null); }
+            catch { resolve(null); }
+        });
+        sr.on('error', () => { fs.unlink(tmpFile, () => {}); resolve(null); });
+    });
+}
+
+async function downloadArtwork(url) {
+    return new Promise((resolve) => {
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, (res) => {
+            if (res.statusCode !== 200) { res.resume(); resolve(null); return; }
+            const type = res.headers['content-type'] || 'image/jpeg';
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => resolve({ data: Buffer.concat(chunks), type }));
+            res.on('error', () => resolve(null));
+        }).on('error', () => resolve(null));
+    });
+}
+
+async function runRecognition() {
+    if (!state.shouldStream || !state.currentSessionId) return;
+
+    log('Running song recognition...');
+    const track = await recognizeSong();
+
+    if (track) {
+        const title = track.title || EXT_NAME;
+        const artist = track.subtitle || '';
+        log(`Recognized: ${artist} - ${title}`);
+
+        const coverUrl = track.images?.coverart;
+        if (coverUrl) {
+            const artwork = await downloadArtwork(coverUrl);
+            if (artwork) {
+                state.artworkData = artwork.data;
+                state.artworkType = artwork.type;
+                log(`Artwork updated (${state.artworkData.length} bytes)`);
+            }
+        }
+
+        state.core?.services.RoonApiAudioInput.update_track_info({
+            session_id: state.currentSessionId,
+            info: {
+                image_url: artworkUrl,
+                one_line:   { line1: title },
+                two_line:   { line1: title, line2: artist },
+                three_line: { line1: title, line2: artist, line3: '' },
+            },
+        }, () => {});
+    } else {
+        log('Song not recognized');
+    }
+
+    if (state.shouldStream && state.currentSessionId) {
+        state.recognitionTimer = setTimeout(runRecognition, RECOGNITION_INTERVAL);
+    }
+}
+
+function startRecognitionLoop(sessionId) {
+    state.currentSessionId = sessionId;
+    state.recognitionTimer = setTimeout(runRecognition, RECOGNITION_INTERVAL);
+    log(`Recognition loop started (every ${RECOGNITION_INTERVAL / 1000}s)`);
+}
+
+function stopRecognitionLoop() {
+    clearTimeout(state.recognitionTimer);
+    state.recognitionTimer = null;
+    state.currentSessionId = null;
+    state.artworkData = null;
 }
 
 function startSession() {
@@ -149,7 +274,6 @@ function startSession() {
     startAudio();
 
     const streamUrl = `http://${localIp}:${HTTP_PORT}/stream`;
-    const artworkUrl = `http://${localIp}:${HTTP_PORT}/artwork.png`;
 
     log(`Beginning session → zone ${resolvedZoneId}`);
 
@@ -179,6 +303,7 @@ function startSession() {
                     const event = msg?.name ?? msg;
                     log(`Playback event: ${event}`);
                     if (['StoppedUser', 'EndedNaturally', 'MediaError', 'ZoneNotFound', 'ZoneLost'].includes(event)) {
+                        stopRecognitionLoop();
                         state.session = null;
                         stopAudio();
                         if (event === 'StoppedUser') {
@@ -191,9 +316,11 @@ function startSession() {
                     }
                 });
 
+                startRecognitionLoop(body.session_id);
                 log('Session active, playback started');
             } else if (['ZoneNotFound', 'ZoneLost', 'SessionEnded'].includes(msg)) {
                 log(`Session ended: ${msg}`);
+                stopRecognitionLoop();
                 state.session = null;
                 stopAudio();
                 if (state.shouldStream) {
@@ -206,6 +333,7 @@ function startSession() {
 }
 
 function stopSession() {
+    stopRecognitionLoop();
     if (state.session) {
         log('Ending session');
         state.session.end_session(() => {});
