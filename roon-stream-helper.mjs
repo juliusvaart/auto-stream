@@ -25,7 +25,7 @@ const STREAM_DEV = process.env.STREAM_DEV;
 const EXT_ID = process.env.ROON_EXTENSION_ID || 'com.recordplayer.autostream';
 const EXT_NAME = process.env.ROON_DISPLAY_NAME || 'Record player';
 const EXT_LINE2 = process.env.ROON_DISPLAY_LINE2 || 'Streaming live';
-//const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
+const ARTWORK_PATH = path.join(__dirname, 'platenspeler.png');
 
 const state = {
     core: null,
@@ -99,11 +99,11 @@ const server = http.createServer((req, res) => {
             ff.kill('SIGTERM');
             log(`Roon disconnected (${state.ffmpegProcs.size - 1} active)`);
         });
-    // } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
-    //     const stat = fs.statSync(ARTWORK_PATH);
-    //     log(`Artwork requested (${stat.size} bytes)`);
-    //     res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
-    //     fs.createReadStream(ARTWORK_PATH).pipe(res);
+    } else if (req.url === '/artwork.png' && fs.existsSync(ARTWORK_PATH)) {
+        const stat = fs.statSync(ARTWORK_PATH);
+        log(`Artwork requested (${stat.size} bytes)`);
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
+        fs.createReadStream(ARTWORK_PATH).pipe(res);
     } else {
         res.writeHead(404).end();
     }
@@ -170,6 +170,7 @@ function startSession() {
                     info: {
                         is_seek_allowed: false,
                         is_pause_allowed: false,
+                        image_url: artworkUrl,
                         one_line:   { line1: EXT_NAME },
                         two_line:   { line1: EXT_NAME, line2: 'Live' },
                         three_line: { line1: EXT_NAME, line2: 'Live', line3: '' },
