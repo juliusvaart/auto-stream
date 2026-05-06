@@ -34,6 +34,10 @@ log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
+vlog() {
+    [ "${VERBOSE:-false}" = "true" ] && echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
 check_audio_level() {
     arecord -D "$MONITOR_DEV" -f cd -d 1 /tmp/check.wav 2>/dev/null
 
@@ -131,7 +135,7 @@ while true; do
     DB_INT=$(check_audio_level)
 
     if [ "$STREAM_ACTIVE" = "true" ]; then
-        log "Streaming - Level: ${DB_INT}dB"
+        vlog "Streaming - Level: ${DB_INT}dB"
 
         if [ "$DB_INT" -gt "$THRESHOLD" ]; then
             if [ $SILENCE_COUNT -gt 0 ]; then
@@ -140,7 +144,7 @@ while true; do
             SILENCE_COUNT=0
         else
             ((SILENCE_COUNT += CHECK_INTERVAL))
-            log "Silence: ${SILENCE_COUNT}s / ${SILENCE_TIMEOUT}s"
+            vlog "Silence: ${SILENCE_COUNT}s / ${SILENCE_TIMEOUT}s"
 
             if [ $SILENCE_COUNT -ge $SILENCE_TIMEOUT ]; then
                 stop_stream
@@ -149,7 +153,7 @@ while true; do
             fi
         fi
     else
-        log "Idle - Level: ${DB_INT}dB"
+        vlog "Idle - Level: ${DB_INT}dB"
 
         if [ "$DB_INT" -gt "$THRESHOLD" ]; then
             log "Audio detected → starting"

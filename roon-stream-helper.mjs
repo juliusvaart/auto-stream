@@ -48,9 +48,15 @@ const state = {
     currentSessionId: null,
 };
 
+const VERBOSE = process.env.VERBOSE === 'true';
+
 function log(msg) {
     const ts = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
     process.stdout.write(`${ts} [roon] ${msg}\n`);
+}
+
+function vlog(msg) {
+    if (VERBOSE) log(msg);
 }
 
 function getLocalIp() {
@@ -96,7 +102,7 @@ const server = http.createServer((req, res) => {
         state.ffmpegProcs.add(ff);
         ff.stderr.on('data', () => {});
         ff.stdout.on('data', (chunk) => { if (!res.writableEnded) res.write(chunk); });
-        ff.on('exit', (code) => { log(`ffmpeg exited (${code})`); state.ffmpegProcs.delete(ff); });
+        ff.on('exit', (code) => { vlog(`ffmpeg exited (${code})`); state.ffmpegProcs.delete(ff); });
 
         // Wire arecord → this ffmpeg
         state.arecord.stdout.on('data', onAudioData);
@@ -115,7 +121,7 @@ const server = http.createServer((req, res) => {
             res.end(state.artworkData);
         } else if (fs.existsSync(ARTWORK_PATH)) {
             const stat = fs.statSync(ARTWORK_PATH);
-            log(`Artwork requested (${stat.size} bytes)`);
+            vlog(`Artwork requested (${stat.size} bytes)`);
             res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': stat.size });
             fs.createReadStream(ARTWORK_PATH).pipe(res);
         } else {
@@ -207,7 +213,7 @@ async function downloadArtwork(url) {
 async function runRecognition() {
     if (!state.shouldStream || !state.currentSessionId) return;
 
-    log('Running song recognition...');
+    vlog('Running song recognition...');
     const track = await recognizeSong();
 
     if (track) {
@@ -235,7 +241,7 @@ async function runRecognition() {
             },
         }, () => {});
     } else {
-        log('Song not recognized');
+        vlog('Song not recognized');
     }
 
     if (state.shouldStream && state.currentSessionId) {

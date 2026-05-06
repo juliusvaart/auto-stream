@@ -76,6 +76,9 @@ SILENCE_TIMEOUT=120    # seconds of silence before stopping the stream
 HTTP_PORT=4567
 ROON_EXTENSION_ID=com.recordplayer.autostream
 ROON_DISPLAY_NAME=Record player
+
+# Logging (set to true to see per-tick level readings and recognition polling)
+VERBOSE=false
 ```
 
 ## Systemd service
