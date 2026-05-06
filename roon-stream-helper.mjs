@@ -213,7 +213,7 @@ async function downloadArtwork(url) {
 async function runRecognition() {
     if (!state.shouldStream || !state.currentSessionId) return;
 
-    vlog('Running song recognition...');
+    log('Running songrec...');
     const track = await recognizeSong();
 
     if (track) {
@@ -307,7 +307,7 @@ function startSession() {
                     },
                 }, (msg) => {
                     const event = msg?.name ?? msg;
-                    log(`Playback event: ${event}`);
+                    vlog(`Playback event: ${event}`);
                     if (['StoppedUser', 'EndedNaturally', 'MediaError', 'ZoneNotFound', 'ZoneLost'].includes(event)) {
                         stopRecognitionLoop();
                         state.session = null;
