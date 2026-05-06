@@ -226,7 +226,7 @@ const roon = new RoonApi({
     extension_id:    EXT_ID,
     display_name:    EXT_NAME,
     display_version: '1.0.0',
-    publisher:       'Platenspeler',
+    publisher:       'Julius van der Vaart',
     email:           'julius@vanderva.art',
     log_level:       'none',
 
